@@ -10,6 +10,7 @@ data Pip = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
 
 type Card = (Pip, Suit)
 type Deck = [Card]
+type Stock = [Card]
 
 
 -- STEP 2
@@ -42,38 +43,45 @@ shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [
 type Foundation = [Card]
 type Column = [[Card]]
 type Reserve = [Card]
+type Hidden = [Int]
 
-data Board = EOBoard Foundation Column Reserve | SBoard deriving Eq
+data Board = EOBoard Foundation Column Reserve | SBoard Foundation Column Hidden Stock deriving Eq
 
 instance Show Board where
     show t = showBoard t
         where
           showBoard (EOBoard foundations columns reserves) = "EOBoard \nFoundations  " 
-            ++ (wrapSquareBracket.showCards) foundations
-            ++ "\nColumns\n" ++ unpackColumns "\n" columns ++ "\nReserve      "
-            ++ (wrapSquareBracket.showCards) reserves
+            ++ wrapSquareBracket (showCards foundations 0)
+            ++ "\nColumns\n" ++ unpackColumns "\n" columns [0,0,0,0,0,0,0,0] ++ "\nReserve      "
+            ++ wrapSquareBracket (showCards reserves 0)
 
-          showBoard SBoard = "board" ++ "\n" ++ "of S"
+          
+          showBoard (SBoard foundations columns hidden stock) = "SBoard \nFoundations  " 
+            ++ wrapSquareBracket (showCards foundations 0)
+            ++ "\nColumns\n" ++ unpackColumns "\n" columns hidden ++ "\nStock  "
+            ++ show ((length (stock)) `div` 10) ++ " Deals remaining"
+
 
           -- create a String representation of a list of cards
-          showCards [] = "" -- might be redundant
-          showCards [card] = displayCard card
-          -- showCards [(card:rest)] = displayCard card
-          showCards (card:restCards) = displayCard card ++ "," ++ (showCards restCards)
+          showCards :: [Card] -> Int -> String
+          showCards [] _ = "" -- might be redundant
+          showCards [card] 0 = displayCard card
+          showCards [card] n  = "<unknown>"
+          showCards (card:restCards) n | (length (card:restCards)) > n  = displayCard card ++ "," ++ (showCards restCards n)
+                                       | otherwise                      = "<unknown>" ++ "," ++ (showCards restCards n)
 
           -- creates a String representation of a card pair
           displayCard card = "(" ++ (show (fst card)) ++ "," ++ (show (snd card)) ++ ")"
 
-          -- it works
           wrapSquareBracket :: String -> String
           wrapSquareBracket cards = "[" ++ cards ++ "]"
 
           -- cretates a string representation of nested lists of cards
-          unpackColumns :: String -> [[Card]] -> String
-          unpackColumns separator [] = "" -- might be redundant
-          unpackColumns separator [card] = "  " ++ ((wrapSquareBracket.showCards) card)
-          unpackColumns separator (column:restColumns) = "  " ++ ((wrapSquareBracket.showCards) column) 
-            ++ separator ++ (unpackColumns separator restColumns)
+          unpackColumns :: String -> [[Card]] -> [Int] -> String
+          unpackColumns separator [] _ = "" -- might be redundant
+          unpackColumns separator [card] [x] = "  " ++ (wrapSquareBracket(showCards card x))
+          unpackColumns separator (column:restColumns) (x:xs) = "  " ++ (wrapSquareBracket (showCards column x)) 
+            ++ separator ++ (unpackColumns separator restColumns xs)
 
 
 displayEO = EOBoard [] [[]] []
@@ -83,8 +91,19 @@ groupCards [] = []
 groupCards list = [fst (splitAt 6 (list))] ++ groupCards (snd (splitAt 6 (list)))
 
 getColumns list = tail (reverse list)
+
 getReserve :: [[Card]] -> [Card]
 getReserve list = head (reverse list)
+
+splitColumns _ [] = []
+splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt n (list)))
+
+sDeal n = SBoard [] ((splitColumns 6 (fst cardsToDeal)) ++ (splitColumns 5 (snd cardsToDeal))) [5,5,5,5,4,4,4,4,4,4] (snd cards)
+    where 
+      cards = splitAt 54 (shuffleS n)
+      cardsToDeal = splitAt 24 (fst cards)
+
+shuffleS n = [card | (card, n) <- sortBy cmp (zip (pack ++ (shuffle n)) (randoms (mkStdGen n) :: [Int]))]
 
 
 -- toFoundations
@@ -106,8 +125,10 @@ aceInList (EOBoard f c r) (x:xs) | fst x == Ace  = EOBoard (f ++ [x]) c (deleteC
 aceInColumns :: Board -> [[Card]] -> Board
 aceInColumns (EOBoard f c r) [] = EOBoard f c r
 aceInColumns (EOBoard f c r) (x:xs) | (length x) == 0        = aceInColumns (EOBoard f c r) xs
-                                    | (fst (head x)) == Ace  = EOBoard (f ++ [(head x)]) (replaceColumn c x) r
+                                    | (fst (head x)) == Ace  = EOBoard (f ++ [(head x)]) (replace x newX c) r
                                     | otherwise           = aceInColumns (EOBoard f c r) xs
+                                      where
+                                        newX = deleteCard x (head x)
 
 -- takes a board, list and card, then goes through all the cards in list looking for succesor, if found than adding it to f deleteting from r
 subInList :: Board -> [Card] -> Card -> Board
@@ -119,10 +140,13 @@ subInList (EOBoard f c r) (x:xs) card | x == succ  = EOBoard (replaceCard f card
 -- 
 subInColumns :: Board -> [[Card]] -> Card -> Board
 subInColumns (EOBoard f c r) [] card = EOBoard f c r
-subInColumns (EOBoard f c r) (x:xs) card  | (length x) == 0           =  subInColumns (EOBoard f c r) xs card
-                                          | (head x) == succ  = EOBoard (replaceCard f card (head x)) (replaceColumn c x) r
-                                          | otherwise         = subInColumns (EOBoard f c r) xs card
-                                           where succ = sCard (card)
+subInColumns (EOBoard f c r) (x:xs) card  | (length x) == 0           = subInColumns (EOBoard f c r) xs card
+                                          | (head x) == succ          = EOBoard (replaceCard f card (head x)) (replace x newX c) r
+                                          | otherwise                 = subInColumns (EOBoard f c r) xs card
+                                           where 
+                                             succ = sCard (card)
+                                             newX = deleteCard x (head x)
+
 
 lookForSubsR :: Board -> Int -> Board
 lookForSubsR (EOBoard f c r) (-1) = EOBoard f c r
@@ -139,14 +163,10 @@ lookForSubsC (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
                                       newBoard = subInColumns (EOBoard f c r) c (f!!index)
 
 -- helper
-replaceColumn :: [[Card]] -> [Card] -> [[Card]]
-replaceColumn c column = replace column (deleteCard column (head column)) c
-
-
 replaceCard :: [Card] -> Card -> Card -> [Card]
-replaceCard [] card1 card2 = []  
-replaceCard (x:xs) card1 card2 | x == card1     = card2 : xs
-                               | otherwise      = x : replaceCard xs card1 card2
+replaceCard [] old new = []  
+replaceCard (x:xs) old new | x == old     = new : xs
+                               | otherwise      = x : replaceCard xs old new
 
 deleteCard :: [Card] -> Card -> [Card]
 deleteCard list card = delete card list
