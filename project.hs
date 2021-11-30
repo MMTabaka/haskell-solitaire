@@ -178,11 +178,9 @@ replace old new (x:xs) | old == x     = new:(replace old new xs)
                        | otherwise    = x:(replace old new xs)
 
 
--- findMoves :: Board -> [Board]
-
 -- if there is free space in reserve then it adds a card there
 freeSpaceInR :: Board -> Card -> Board
-freeSpaceInR (EOBoard f c r) card | length (r) < 8  = EOBoard f c (r ++ [card])
+freeSpaceInR (EOBoard f c r) card | (length r) < 8  = EOBoard f c (r ++ [card])
                                   | otherwise = EOBoard f c r
 
 -- the same as before except the action (create just one function)
@@ -215,13 +213,25 @@ forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                       newBoard =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
                                                       newCol = delete (head col) col
 
+forAllReserves :: Board -> [Card] -> [Board] -> [Board]
+forAllReserves (EOBoard f c r) [] boards = boards
+forAllReserves (EOBoard f c r) (card:cards) boards = forAllReserves (EOBoard f c r) cards newBoards
+                                                        where 
+                                                          newBoards =  boards ++ callMoves (EOBoard f c (delete card r)) card
 
+ 
 
-
-callIteration (EOBoard f c r) = forAllColumnHeads (EOBoard newF newC newR) newC  []
+callIteration (EOBoard f c r) = (forAllColumnHeads (EOBoard newF newC newR) newC  []) ++ (forAllReserves (EOBoard newF newC newR) newR [])
                                   where
                                     (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
 
+
+removeDuplicates _ [] = []
+removeDuplicates startBoard (board:boards) | startBoard == board   = removeDuplicates startBoard boards
+                                           | otherwise             = toFoundations(board) : removeDuplicates startBoard boards
+
+findMoves :: Board -> [Board]
+findMoves board = removeDuplicates (toFoundations board) (callIteration board)
 
 -- chooseMove :: Board -> Maybe Board
 
