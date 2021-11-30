@@ -201,6 +201,28 @@ successorInC boards (EOBoard f c r) (x:xs) card
 
 callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card]
 
+decideDeletion _ _ _ [] = []
+decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
+
+
+forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
+forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
+                                                    | col == []         = boards
+                                                    | length (col:cols) == 1  = newBoard
+                                                    | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoard
+                                                    where 
+                                                      -- newBoards = boards ++ decideDeletion col newCol (EOBoard f c r) (callMoves (EOBoard f c r) (head col))
+                                                      newBoard =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
+                                                      newCol = delete (head col) col
+
+
+
+
+callIteration (EOBoard f c r) = forAllColumnHeads (EOBoard newF newC newR) newC  []
+                                  where
+                                    (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
+
+
 -- chooseMove :: Board -> Maybe Board
 
 haveWon :: Board -> Bool
