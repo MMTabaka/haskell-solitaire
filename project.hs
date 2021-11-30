@@ -186,16 +186,20 @@ freeSpaceInR (EOBoard f c r) card | length (r) < 8  = EOBoard f c (r ++ [card])
                                   | otherwise = EOBoard f c r
 
 -- the same as before except the action (create just one function)
-successorInC :: Board -> [[Card]] -> Card -> Board
-successorInC board [] _ = board
-successorInC (EOBoard f c r) (x:xs) card | (length x) == 0           =  successorInC (EOBoard f c r) xs card
-                                         | (head x) == succ          = EOBoard f (replace x newX c) r
-                                         | otherwise                 = successorInC (EOBoard f c r) xs card
-                                          where 
-                                            succ = sCard (card)
-                                            newX = [card] ++ x
+successorInC :: [Board] -> Board -> [[Card]] -> Card -> [Board]
+successorInC boards board [] _ = boards
+successorInC boards (EOBoard f c r) (x:xs) card 
+                                | and [((fst card) == King), ((length x) == 0)]         = boards ++ [newBoard]  
+                                | (length x) == 0                                       = successorInC boards (EOBoard f c r) xs card
+                                | (head x) == succ                                      = if newBoard `elem` boards then
+                                                                                             successorInC boards (EOBoard f c r) xs card else boards ++ [newBoard]
+                                | otherwise                                             = successorInC boards (EOBoard f c r) xs card
+                                    where 
+                                      succ = sCard (card)
+                                      newX = [card] ++ x
+                                      newBoard = EOBoard f (replace x newX c) r
 
-callColumnMoves (EOBoard f c r) card = successorInC (EOBoard f c r) c card
+callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card]
 
 -- chooseMove :: Board -> Maybe Board
 
