@@ -3,19 +3,17 @@ import Data.List
 import Data.Maybe
 
 
+-- PART 1.1 - types for Suit, Pip, Card, Deck
 data Suit = Hearts | Clubs | Spades | Diamonds deriving (Eq, Show, Enum)
 
-data Pip = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
-             Jack | Queen | King | Ace deriving (Eq, Show, Enum)
+data Pip = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | -- ?Does the position od Ace matter?
+             Jack | Queen | King | Ace deriving (Eq, Show, Enum)         
 
 type Card = (Pip, Suit)
 type Deck = [Card]
-type Stock = [Card]
-type Foundation = [Card]
-type Column = [[Card]]
-type Reserve = [Card]
-type Hidden = [Int]
 
+
+-- PART 1.2 - pack, sCard, pCard, isAce, isKing
 pack :: Deck
 pack = [(p, s) | p <- [Two .. Ace], s <- [Hearts .. Diamonds]]
 
@@ -27,7 +25,7 @@ pCard :: Card -> Card
 pCard (Two, s) = (Ace, s)
 pCard (p, s) = (pred p, s)
 
-isAce :: Card -> Bool
+isAce :: Card -> Bool -- use isAce and isKing later instead
 isAce (p, s) = p == Ace
 
 isKing :: Card -> Bool
@@ -37,9 +35,17 @@ cmp :: Ord b => (a, b) -> (a, b) -> Ordering -- think about types
 cmp (x1,y1) (x2,y2) = compare y1 y2
 
 shuffle :: Int -> Deck
-shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [Int]))] -- how to get random n
+shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [Int]))]
 
 
+-- PART 1.3 - Foundation, Column, Reserve, Board, ?constant of Board?, 
+type Foundation = [Card]
+type Column = [[Card]]
+type Reserve = [Card]
+
+-- PART 1.5
+type Hidden = [Int]
+type Stock = [Card]
 
 
 data Board = EOBoard Foundation Column Reserve | SBoard Foundation Column Hidden Stock deriving Eq
@@ -81,9 +87,20 @@ instance Show Board where
             ++ separator ++ (unpackColumns separator restColumns xs)
 
 
-displayEO = EOBoard [] [[]] []
+displayEO = eODeal 1235 -- ?constant?
+
+
+-- PART 1.4 - eODeal, toFoundations
+-- deals a deck of cards
 eODeal n = EOBoard [] ((getColumns.groupCards.shuffle) n) ((getReserve.groupCards.shuffle) n)
 
+-- PART 1.6 - sDeal
+sDeal n = SBoard [] ((splitColumns 6 (fst cardsToDeal)) ++ (splitColumns 5 (snd cardsToDeal))) [5,5,5,5,4,4,4,4,4,4] (snd cards)
+    where 
+      cards = splitAt 54 (shuffleS n)
+      cardsToDeal = splitAt 24 (fst cards)
+
+-- helpers for eODeal
 groupCards [] = []
 groupCards list = [fst (splitAt 6 (list))] ++ groupCards (snd (splitAt 6 (list)))
 
@@ -92,18 +109,14 @@ getColumns list = tail (reverse list)
 getReserve :: [[Card]] -> [Card]
 getReserve list = head (reverse list)
 
+-- helpers for sDeal
 splitColumns _ [] = []
 splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt n (list)))
-
-sDeal n = SBoard [] ((splitColumns 6 (fst cardsToDeal)) ++ (splitColumns 5 (snd cardsToDeal))) [5,5,5,5,4,4,4,4,4,4] (snd cards)
-    where 
-      cards = splitAt 54 (shuffleS n)
-      cardsToDeal = splitAt 24 (fst cards)
 
 shuffleS n = [card | (card, n) <- sortBy cmp (zip (pack ++ (shuffle n)) (randoms (mkStdGen n) :: [Int]))]
 
 
--- toFoundations
+--
 -- applies toFoundation until the supplied board is the same as the one after applying all subfunctions (no moves to foundations are possible)
 toFoundations (EOBoard f c r) | newBoard /= (EOBoard f c r) = toFoundations newBoard
                               | otherwise                              = EOBoard f c r
@@ -162,7 +175,7 @@ lookForSubsC (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
                                     where
                                       newBoard = subInColumns (EOBoard f c r) c (f!!index)
 
--- helper
+-- helpers
 replaceCard :: [Card] -> Card -> Card -> [Card]
 replaceCard [] old new = []  
 replaceCard (x:xs) old new | x == old     = new : xs
@@ -178,6 +191,7 @@ replace old new (x:xs) | old == x     = new:(replace old new xs)
                        | otherwise    = x:(replace old new xs)
 
 
+
 -- if there is free space in reserve then it adds a card there
 freeSpaceInR :: Board -> Card -> Board
 freeSpaceInR (EOBoard f c r) card | (length r) < 8  = EOBoard f c (r ++ [card])
@@ -187,7 +201,6 @@ freeSpaceInR (EOBoard f c r) card | (length r) < 8  = EOBoard f c (r ++ [card])
 successorInC :: [Board] -> Board -> [[Card]] -> Card -> [Board]
 successorInC boards board [] _ = boards
 successorInC boards (EOBoard f c r) (x:xs) card 
-                                | and [((fst card) == King), ((length x) == 0)]         = boards ++ [newBoard]  
                                 | (length x) == 0                                       = successorInC boards (EOBoard f c r) xs card
                                 | (head x) == succ                                      = if newBoard `elem` boards then
                                                                                              successorInC boards (EOBoard f c r) xs card else boards ++ [newBoard]
@@ -196,6 +209,27 @@ successorInC boards (EOBoard f c r) (x:xs) card
                                       succ = sCard (card)
                                       newX = [card] ++ x
                                       newBoard = EOBoard f (replace x newX c) r
+countEmptyColumns [] = 0
+countEmptyColumns (x:xs) | x == [] = 1 + countEmptyColumns xs
+                         | otherwise = countEmptyColumns xs
+
+insertKing [] _ _ = []
+insertKing (x:xs) card 0 | x == []   = [card]:xs
+                         | otherwise = x : insertKing xs card 0
+
+insertKing (x:xs) card n | x == []    = x : insertKing xs card (n - 1)
+                         | otherwise  = x : insertKing xs card n
+
+populateAllEmpty :: [[Card]] -> Card -> Int -> [[[Card]]]
+populateAllEmpty list card (-1) = []
+populateAllEmpty (x:xs) card n = [insertKing (x:xs) card n] ++ populateAllEmpty (x:xs) card (n-1)
+
+generateBoardKings board [] = []
+generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKings (EOBoard f c r) xs
+
+
+findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1) )
+                                  | otherwise      = []
 
 callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card]
 
@@ -209,7 +243,6 @@ forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                     | length (col:cols) == 1  = newBoard
                                                     | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoard
                                                     where 
-                                                      -- newBoards = boards ++ decideDeletion col newCol (EOBoard f c r) (callMoves (EOBoard f c r) (head col))
                                                       newBoard =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
                                                       newCol = delete (head col) col
 
@@ -236,7 +269,7 @@ findMoves board = removeDuplicates (toFoundations board) (callIteration board)
 -- chooseMove :: Board -> Maybe Board
 
 haveWon :: Board -> Bool
-haveWon (EOBoard f [[]] []) = True
+haveWon (EOBoard _ [[],[],[],[],[],[],[],[]] []) = True
 haveWon board = False 
 
 -- playSolitair :: Board -> Int
@@ -244,103 +277,104 @@ haveWon board = False
 
 
 
--- {- Paste the contents of this file, including this comment, into your source file, below all
---      of your code. You can change the indentation to align with your own, but other than this,
---      ONLY make changes as instructed in the comments.
---    -}
---   -- Constants that YOU must set:
---   studentName = "Your Name Here"
---   studentNumber = "Your Student Number"
---   studentUsername = "Your Student Username"
+{- Paste the contents of this file, including this comment, into your source file, below all
+    of your code. You can change the indentation to align with your own, but other than this,
+    ONLY make changes as instructed in the comments.
+  -}
+-- Constants that YOU must set:
+studentName = "Milosz Tabaka"
+studentNumber = "200131955"
+studentUsername = "aca20mmt"
 
---   initialBoardDefined = XXX {- replace XXX with the name of the constant that you defined
---                                in step 3 of part 1 -}
---   secondBoardDefined = YYY {- replace YYY with the constant defined in step 5 of part 1,
---                               or if you have chosen to demonstrate play in a different game
---                               of solitaire for part 2, a suitable contstant that will show
---                               your play to good effect for that game -}
+initialBoardDefined = displayEO {- replace XXX with the name of the constant that you defined
+                              in step 3 of part 1 -}
+-- secondBoardDefined = YYY {- replace YYY with the constant defined in step 5 of part 1,
+--                             or if you have chosen to demonstrate play in a different game
+--                             of solitaire for part 2, a suitable contstant that will show
+--                             your play to good effect for that game -}
 
---   {- Beyond this point, the ONLY change you should make is to change the comments so that the
---      work you have completed is tested. DO NOT change anything other than comments (and indentation
---      if needed). The comments in the template file are set up so that only the constant eight-off
---      board from part 1 and the toFoundations function from part 1 are tested. You will probably
---      want more than this tested.
+{- Beyond this point, the ONLY change you should make is to change the comments so that the
+    work you have completed is tested. DO NOT change anything other than comments (and indentation
+    if needed). The comments in the template file are set up so that only the constant eight-off
+    board from part 1 and the toFoundations function from part 1 are tested. You will probably
+    want more than this tested.
 
---      CHECK with Emma or one of the demonstrators if you are unsure how to change this.
+    CHECK with Emma or one of the demonstrators if you are unsure how to change this.
 
---      If you mess this up, your code will not compile, which will lead to being awarded 0 marks
---      for functionality and style.
---   -}
+    If you mess this up, your code will not compile, which will lead to being awarded 0 marks
+    for functionality and style.
+-}
 
---   main :: IO()
---   main =
---     do
---       putStrLn $ "Output for " ++ studentName ++ " (" ++ studentNumber ++ ", " ++ studentUsername ++ ")"
+main :: IO()
+main =
+  do
+    putStrLn $ "Output for " ++ studentName ++ " (" ++ studentNumber ++ ", " ++ studentUsername ++ ")"
 
---       putStrLn "***The eight-off initial board constant from part 1:"
---       print initialBoardDefined
+    putStrLn "***The eight-off initial board constant from part 1:"
+    print initialBoardDefined
 
---       let board = toFoundations initialBoardDefined
---       putStrLn "***The result of calling toFoundations on that board:"
---       print board
+    let board = toFoundations initialBoardDefined
+    putStrLn "***The result of calling toFoundations on that board:"
+    print board
 
---       {- Move the start comment marker below to the appropriate position.
---         If you have completed ALL the tasks for the assignment, you can
---         remove the comments from the main function entirely.
---         DO NOT try to submit/run non-functional code - you will receive 0 marks
---         for ALL your code if you do, even if *some* of your code is correct.
---       -}
+    {- Move the start comment marker below to the appropriate position.
+      If you have completed ALL the tasks for the assignment, you can
+      remove the comments from the main function entirely.
+      DO NOT try to submit/run non-functional code - you will receive 0 marks
+      for ALL your code if you do, even if *some* of your code is correct.
+    -}
 
---       {- start comment marker - move this if appropriate
+    
 
---       let boards = findMoves board      -- show that findMoves is working
---       putStrLn "***The possible next moves after that:"
---       print boards
+    let boards = findMoves board      -- show that findMoves is working
+    putStrLn "***The possible next moves after that:"
+    print boards
 
---       let chosen = chooseMove board     -- show that chooseMove is working
---       putStrLn "***The chosen move from that set:"
---       print chosen
+{- start comment marker - move this if appropriate
+    let chosen = chooseMove board     -- show that chooseMove is working
+    putStrLn "***The chosen move from that set:"
+    print chosen
 
---       putStrLn "***Now showing a full game"     -- display a full game
---       score <- displayGame initialBoardDefined 0
---       putStrLn $ "Score: " ++ score
---       putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire initialBoardDefined)
+    putStrLn "***Now showing a full game"     -- display a full game
+    score <- displayGame initialBoardDefined 0
+    putStrLn $ "Score: " ++ score
+    putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire initialBoardDefined)
 
 
---       putStrLn "\n\n\n************\nNow looking at the alternative game:"
+    putStrLn "\n\n\n************\nNow looking at the alternative game:"
 
---       putStrLn "***The spider initial board constant from part 1 (or equivalent if playing a different game of solitaire):"
---       print secondBoardDefined          -- show the suitable constant. For spider solitaire this
---                                         -- is not an initial game, but a point from which the game
---                                         -- can be won
+    putStrLn "***The spider initial board constant from part 1 (or equivalent if playing a different game of solitaire):"
+    print secondBoardDefined          -- show the suitable constant. For spider solitaire this
+                                      -- is not an initial game, but a point from which the game
+                                      -- can be won
 
---       putStrLn "***Now showing a full game for alternative solitaire"
---       score <- displayGame secondBoardDefined 0 -- see what happens when we play that game (assumes chooseMove
---                                                 -- works correctly)
---       putStrLn $ "Score: " ++ score
---       putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire secondBoardDefined)
+    putStrLn "***Now showing a full game for alternative solitaire"
+    score <- displayGame secondBoardDefined 0 -- see what happens when we play that game (assumes chooseMove
+                                              -- works correctly)
+    putStrLn $ "Score: " ++ score
+    putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire secondBoardDefined)
 
---       -}
+    -}
 
---   {- displayGame takes a Board and move number (should initially be 0) and
---      displays the game step-by-step (board-by-board). The result *should* be
---      the same as performing playSolitaire on the initial board, if it has been
---      implemented correctly.
---      DO NOT CHANGE THIS CODE other than aligning indentation with your own.
---   -}
---   displayGame :: Board -> Int ->IO String
---   displayGame board n =
---     if haveWon board
---       then return "A WIN"
---       else
---         do
---           putStr ("Move " ++ show n ++ ": " ++ show board)
---           let maybeBoard = chooseMove board
---           if isJust maybeBoard then
---             do
---               let (Just newBoard) = maybeBoard
---               displayGame newBoard (n+1)
---           else
---             do
---               let score = show (playSolitaire board)
---               return score
+{- displayGame takes a Board and move number (should initially be 0) and
+    displays the game step-by-step (board-by-board). The result *should* be
+    the same as performing playSolitaire on the initial board, if it has been
+    implemented correctly.
+    DO NOT CHANGE THIS CODE other than aligning indentation with your own.
+-}
+-- displayGame :: Board -> Int ->IO String
+-- displayGame board n =
+--   if haveWon board
+--     then return "A WIN"
+--     else
+--       do
+--         putStr ("Move " ++ show n ++ ": " ++ show board)
+--         let maybeBoard = chooseMove board
+--         if isJust maybeBoard then
+--           do
+--             let (Just newBoard) = maybeBoard
+--             displayGame newBoard (n+1)
+--         else
+--           do
+--             let score = show (playSolitaire board)
+--             return score
