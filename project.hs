@@ -201,7 +201,7 @@ freeSpaceInR (EOBoard f c r) card | (length r) < 8  = EOBoard f c (r ++ [card])
 successorInC :: [Board] -> Board -> [[Card]] -> Card -> [Board]
 successorInC boards board [] _ = boards
 successorInC boards (EOBoard f c r) (x:xs) card 
-                                | (length x) == 0                                       = successorInC boards (EOBoard f c r) xs card
+                                | x == []                                               = successorInC boards (EOBoard f c r) xs card
                                 | (head x) == succ                                      = if newBoard `elem` boards then
                                                                                              successorInC boards (EOBoard f c r) xs card else boards ++ [newBoard]
                                 | otherwise                                             = successorInC boards (EOBoard f c r) xs card
@@ -228,10 +228,10 @@ generateBoardKings board [] = []
 generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKings (EOBoard f c r) xs
 
 
-findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1) )
+findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1))
                                   | otherwise      = []
 
-callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card]
+callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card] -- ++ findMoveKing (EOBoard f c r) card
 
 decideDeletion _ _ _ [] = []
 decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
@@ -239,11 +239,12 @@ decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace
 
 forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
 forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
-                                                    | col == []         = boards
-                                                    | length (col:cols) == 1  = newBoard
-                                                    | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoard
+                                                    | (col:cols) == [[]] = boards
+                                                    | col == []         = forAllColumnHeads (EOBoard f c r) cols boards
+                                                    | length (col:cols) == 1  = newBoards
+                                                    | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoards
                                                     where 
-                                                      newBoard =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
+                                                      newBoards =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
                                                       newCol = delete (head col) col
 
 forAllReserves :: Board -> [Card] -> [Board] -> [Board]
