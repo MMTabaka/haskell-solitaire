@@ -6,8 +6,8 @@ import Data.Maybe
 -- PART 1.1 - types for Suit, Pip, Card, Deck
 data Suit = Hearts | Clubs | Spades | Diamonds deriving (Eq, Show, Enum)
 
-data Pip = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | -- ?Does the position od Ace matter?
-             Jack | Queen | King | Ace deriving (Eq, Show, Enum)         
+data Pip =  Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
+             Jack | Queen | King deriving (Eq, Show, Enum)
 
 type Card = (Pip, Suit)
 type Deck = [Card]
@@ -15,14 +15,14 @@ type Deck = [Card]
 
 -- PART 1.2 - pack, sCard, pCard, isAce, isKing
 pack :: Deck
-pack = [(p, s) | p <- [Two .. Ace], s <- [Hearts .. Diamonds]]
+pack = [(p, s) | p <- [Ace .. King], s <- [Hearts .. Diamonds]]
 
 sCard :: Card -> Card
-sCard (Ace, s) = (Two, s) 
+sCard (King, s) = (Ace, s)
 sCard (p, s) = (succ p, s)
 
 pCard :: Card -> Card
-pCard (Two, s) = (Ace, s)
+pCard (Ace, s) = (King, s)
 pCard (p, s) = (pred p, s)
 
 isAce :: Card -> Bool -- use isAce and isKing later instead
@@ -193,9 +193,9 @@ replace old new (x:xs) | old == x     = new:(replace old new xs)
 
 
 -- if there is free space in reserve then it adds a card there
-freeSpaceInR :: Board -> Card -> Board
-freeSpaceInR (EOBoard f c r) card | (length r) < 8  = EOBoard f c (r ++ [card])
-                                  | otherwise = EOBoard f c r
+freeSpaceInR :: Board -> Card -> [Board]
+freeSpaceInR (EOBoard f c r) card | (length r) < 8  = [EOBoard f c (r ++ [card])]
+                                  | otherwise = []
 
 -- the same as before except the action (create just one function)
 successorInC :: [Board] -> Board -> [[Card]] -> Card -> [Board]
@@ -231,12 +231,12 @@ generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKing
 findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1))
                                   | otherwise      = []
 
-callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ [freeSpaceInR (EOBoard f c r) card] -- ++ findMoveKing (EOBoard f c r) card
+callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ freeSpaceInR (EOBoard f c r) card
 
 decideDeletion _ _ _ [] = []
 decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
 
-
+-- iterate through all heads in c and returns new boards which are a result of finding places for mentioned heads
 forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
 forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                     | (col:cols) == [[]] = boards
@@ -259,10 +259,18 @@ callIteration (EOBoard f c r) = (forAllColumnHeads (EOBoard newF newC newR) newC
                                   where
                                     (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
 
-
+-- remove from possible moves original board
 removeDuplicates _ [] = []
-removeDuplicates startBoard (board:boards) | startBoard == board   = removeDuplicates startBoard boards
+removeDuplicates startBoard (board:boards) | equals   = removeDuplicates startBoard boards
                                            | otherwise             = toFoundations(board) : removeDuplicates startBoard boards
+                                              where 
+                                                (EOBoard f c r) = startBoard
+                                                (EOBoard newF newC newR) = board
+                                                equals = f == newF && c == newC && contains r newR
+
+-- checks if two lists are equal despite order
+contains [] y = True
+contains (x:xs) y = elem x y && contains xs y
 
 findMoves :: Board -> [Board]
 findMoves board = removeDuplicates (toFoundations board) (callIteration board)
