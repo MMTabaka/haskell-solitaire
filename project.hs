@@ -87,7 +87,7 @@ instance Show Board where
             ++ separator ++ (unpackColumns separator restColumns xs)
 
 
-displayEO = eODeal 1235 -- ?constant?
+displayEO = eODeal 1238 -- ?constant?
 
 
 -- PART 1.4 - eODeal, toFoundations
@@ -238,9 +238,11 @@ decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace
 
 -- iterate through all heads in c and returns new boards which are a result of finding places for mentioned heads
 forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
+forAllColumnHeads _ [] boards = boards
 forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                     | (col:cols) == [[]] = boards
                                                     | col == []         = forAllColumnHeads (EOBoard f c r) cols boards
+                                                    | if ((length col) > 1) then (sCard (head col)) == (col!!1) else False  = forAllColumnHeads (EOBoard f c r) cols boards
                                                     | length (col:cols) == 1  = newBoards
                                                     | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoards
                                                     where 
@@ -275,16 +277,49 @@ contains (x:xs) y = elem x y && contains xs y
 findMoves :: Board -> [Board]
 findMoves board = removeDuplicates (toFoundations board) (callIteration board)
 
--- chooseMove :: Board -> Maybe Board
+chooseMove :: Board -> Maybe Board
+chooseMove board | result == []  = Nothing
+                 | otherwise     = Just (result !! 0)
+                    where
+                      result = reorderResults (findMoves board)
+
+reorderResults results = moveReservesToEnd results results
+moveReservesToEnd ys [] = ys
+moveReservesToEnd (y:ys) (x:xs) | length r > 5  = moveReservesToEnd (delete x (y:ys) ++ [x]) xs
+                                | otherwise = moveReservesToEnd (y:ys) xs
+                                    where
+                                      (EOBoard f c r) = x
+
 
 haveWon :: Board -> Bool
 haveWon (EOBoard _ [[],[],[],[],[],[],[],[]] []) = True
 haveWon board = False 
 
--- playSolitair :: Board -> Int
+playSolitaire' board | findMoves board == [] = board
+                     | otherwise = playSolitaire' ((findMoves board) !! 0)
+
+playSolitaire :: Board -> Int
+playSolitaire board | findMoves board == [] = countFoundationCards f
+                    | otherwise = playSolitaire ((findMoves board) !! 0)
+                    where
+                      (EOBoard  f c r) = board
+
+countFoundationCards :: [Card] -> Int
+countFoundationCards [] = 0
+countFoundationCards (f:fs) = length ([Ace .. (fst f)]) + countFoundationCards fs
 
 
+analyseEO :: Int -> Int -> (Int, Int)
+analyseEO seed plays = performPlays plays 0 seed 0 0
 
+performPlays 0 _ _ _ _ = (0,0)
+performPlays max current seed wins score | current == max  = (wins, score `div` max)
+                                         | otherwise       = performPlays max (current + 1) (seed + 1) (wins + (addWin result)) (score + result)
+                                            where
+                                                result = playSolitaire (eODeal seed)
+addWin :: Int -> Int
+addWin 52 = 1
+addWin _ = 0
 
 {- Paste the contents of this file, including this comment, into your source file, below all
     of your code. You can change the indentation to align with your own, but other than this,
@@ -339,17 +374,18 @@ main =
     putStrLn "***The possible next moves after that:"
     print boards
 
-{- start comment marker - move this if appropriate
+
     let chosen = chooseMove board     -- show that chooseMove is working
     putStrLn "***The chosen move from that set:"
     print chosen
+
 
     putStrLn "***Now showing a full game"     -- display a full game
     score <- displayGame initialBoardDefined 0
     putStrLn $ "Score: " ++ score
     putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire initialBoardDefined)
 
-
+{- start comment marker - move this if appropriate
     putStrLn "\n\n\n************\nNow looking at the alternative game:"
 
     putStrLn "***The spider initial board constant from part 1 (or equivalent if playing a different game of solitaire):"
@@ -371,19 +407,19 @@ main =
     implemented correctly.
     DO NOT CHANGE THIS CODE other than aligning indentation with your own.
 -}
--- displayGame :: Board -> Int ->IO String
--- displayGame board n =
---   if haveWon board
---     then return "A WIN"
---     else
---       do
---         putStr ("Move " ++ show n ++ ": " ++ show board)
---         let maybeBoard = chooseMove board
---         if isJust maybeBoard then
---           do
---             let (Just newBoard) = maybeBoard
---             displayGame newBoard (n+1)
---         else
---           do
---             let score = show (playSolitaire board)
---             return score
+displayGame :: Board -> Int ->IO String
+displayGame board n =
+  if haveWon board
+    then return "A WIN"
+    else
+      do
+        putStr ("Move " ++ show n ++ ": " ++ show board)
+        let maybeBoard = chooseMove board
+        if isJust maybeBoard then
+          do
+            let (Just newBoard) = maybeBoard
+            displayGame newBoard (n+1)
+        else
+          do
+            let score = show (playSolitaire board)
+            return score
