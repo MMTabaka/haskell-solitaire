@@ -2,18 +2,21 @@ import System.Random
 import Data.List
 import Data.Maybe
 
-
--- PART 1.1 - types for Suit, Pip, Card, Deck
 data Suit = Hearts | Clubs | Spades | Diamonds deriving (Eq, Show, Enum)
 
 data Pip =  Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
              Jack | Queen | King deriving (Eq, Show, Enum)
 
+data Board = EOBoard Foundation Column Reserve | SBoard Foundation Column Hidden Stock  deriving Eq
+
 type Card = (Pip, Suit)
 type Deck = [Card]
+type Foundation = [Card]
+type Column = [[Card]]
+type Reserve = [Card]
+type Hidden = [Int] -- List of numbers of cards that should not be visible in SBoard
+type Stock = [Card]
 
-
--- PART 1.2 - pack, sCard, pCard, isAce, isKing
 pack :: Deck
 pack = [(p, s) | p <- [Ace .. King], s <- [Hearts .. Diamonds]]
 
@@ -25,69 +28,56 @@ pCard :: Card -> Card
 pCard (Ace, s) = (King, s)
 pCard (p, s) = (pred p, s)
 
-isAce :: Card -> Bool -- use isAce and isKing later instead
+isAce :: Card -> Bool
 isAce (p, s) = p == Ace
 
 isKing :: Card -> Bool
 isKing (p, s) = p == King
 
-cmp :: Ord b => (a, b) -> (a, b) -> Ordering -- think about types
+cmp :: Ord b => (a, b) -> (a, b) -> Ordering
 cmp (x1,y1) (x2,y2) = compare y1 y2
 
 shuffle :: Int -> Deck
 shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [Int]))]
 
-
--- PART 1.3 - Foundation, Column, Reserve, Board, ?constant of Board?, 
-type Foundation = [Card]
-type Column = [[Card]]
-type Reserve = [Card]
-
--- PART 1.5
-type Hidden = [Int]
-type Stock = [Card]
-
-
-data Board = EOBoard Foundation Column Reserve | SBoard Foundation Column Hidden Stock deriving Eq
-
+-- Displaying boards (f - foundations, c - columns, r - reserves, h - hidden, s - stock)
 instance Show Board where
     show t = showBoard t
         where
-          showBoard (EOBoard foundations columns reserves) = "EOBoard \nFoundations  " 
-            ++ wrapSquareBracket (showCards foundations 0)
-            ++ "\nColumns\n" ++ unpackColumns "\n" columns [0,0,0,0,0,0,0,0] ++ "\nReserve      "
-            ++ wrapSquareBracket (showCards reserves 0)
+          -- Displaying EOBoard
+          showBoard (EOBoard f c r) = "EOBoard \nFoundations  " 
+            ++ wrapSquareBracket (displayCards f 0)
+            ++ "\nColumns\n" ++ displayColumns "\n" c [0,0,0,0,0,0,0,0] ++ "\nReserve      "
+            ++ wrapSquareBracket (displayCards r 0)
 
-          
-          showBoard (SBoard foundations columns hidden stock) = "SBoard \nFoundations  " 
-            ++ (wrapSquareBracket.showCards foundations) 0
-            ++ "\nColumns\n" ++ unpackColumns "\n" columns hidden ++ "\nStock  "
-            ++ show ((length (stock)) `div` 10) ++ " Deals remaining"
+          -- Displaying SBoard
+          showBoard (SBoard f c h s) = "SBoard \nFoundations  " 
+            ++ wrapSquareBracket (displayCards f 0)
+            ++ "\nColumns\n" ++ displayColumns "\n" c h ++ "\nStock  "
+            ++ show ((length s) `div` 10) ++ " Deals remaining"
 
+          -- Creates a String representation of a card pair
+          displayCard :: Card -> String
+          displayCard (pip, suit) = "(" ++ (show pip) ++ "," ++ (show suit) ++ ")"
 
-          -- create a String representation of a list of cards
-          showCards :: [Card] -> Int -> String
-          showCards [] _ = "" -- might be redundant
-          showCards [card] 0 = displayCard card
-          showCards [card] n  = "<unknown>"
-          showCards (card:restCards) n | (length (card:restCards)) > n  = displayCard card ++ "," ++ (showCards restCards n)
-                                       | otherwise                      = "<unknown>" ++ "," ++ (showCards restCards n)
+          -- Creates a String representation of a list of cards
+          displayCards :: [Card] -> Int -> String
+          displayCards [] _ = ""
+          displayCards [card] 0 = displayCard card
+          displayCards [card] n  = "<unknown>"
+          displayCards (card:restCards) n | (length (card:restCards)) > n  = displayCard card ++ "," ++ (displayCards restCards n)
+                                          | otherwise                      = "<unknown>" ++ "," ++ (displayCards restCards n)
 
-          -- creates a String representation of a card pair
-          displayCard card = "(" ++ (show (fst card)) ++ "," ++ (show (snd card)) ++ ")"
-
+          -- Wraps a list of cards in a square bracket
           wrapSquareBracket :: String -> String
           wrapSquareBracket cards = "[" ++ cards ++ "]"
 
-          -- cretates a string representation of nested lists of cards
-          unpackColumns :: String -> [[Card]] -> [Int] -> String
-          unpackColumns separator [] _ = "" -- might be redundant
-          unpackColumns separator [card] [x] = "  " ++ (wrapSquareBracket(showCards card x))
-          unpackColumns separator (column:restColumns) (x:xs) = "  " ++ (wrapSquareBracket (showCards column x)) 
-            ++ separator ++ (unpackColumns separator restColumns xs)
-
-
-displayEO = eODeal 1238 -- ?constant?
+          -- Creates a string representation of nested lists of cards
+          displayColumns :: String -> [[Card]] -> [Int] -> String
+          displayColumns separator [] _ = "" 
+          displayColumns separator [card] [x] = "  " ++ (wrapSquareBracket(displayCards card x))
+          displayColumns separator (column:restColumns) (x:xs) = "  " ++ (wrapSquareBracket (displayCards column x)) 
+            ++ separator ++ (displayColumns separator restColumns xs)
 
 
 -- PART 1.4 - eODeal, toFoundations
@@ -115,6 +105,8 @@ splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt 
 
 shuffleS n = [card | (card, n) <- sortBy cmp (zip (pack ++ (shuffle n)) (randoms (mkStdGen n) :: [Int]))]
 
+
+displayEO = eODeal 1238 -- ?constant?
 
 --
 -- applies toFoundation until the supplied board is the same as the one after applying all subfunctions (no moves to foundations are possible)
