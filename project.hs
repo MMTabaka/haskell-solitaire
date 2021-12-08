@@ -34,11 +34,6 @@ isAce (p, s) = p == Ace
 isKing :: Card -> Bool
 isKing (p, s) = p == King
 
-cmp :: Ord b => (a, b) -> (a, b) -> Ordering
-cmp (x1,y1) (x2,y2) = compare y1 y2
-
-shuffle :: Int -> Deck
-shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [Int]))]
 
 -- Displaying boards (f - foundations, c - columns, r - reserves, h - hidden, s - stock)
 instance Show Board where
@@ -80,35 +75,46 @@ instance Show Board where
             ++ separator ++ (displayColumns separator restColumns xs)
 
 
--- PART 1.4 - eODeal, toFoundations
--- deals a deck of cards
+-- Deals a deck of cards
 eODeal n = EOBoard [] ((getColumns.groupCards.shuffle) n) ((getReserve.groupCards.shuffle) n)
 
--- PART 1.6 - sDeal
 sDeal n = SBoard [] ((splitColumns 6 (fst cardsToDeal)) ++ (splitColumns 5 (snd cardsToDeal))) [5,5,5,5,4,4,4,4,4,4] (snd cards)
     where 
       cards = splitAt 54 (shuffleS n)
       cardsToDeal = splitAt 24 (fst cards)
 
--- helpers for eODeal
+
+-- Helpers fot initial layouts
+cmp :: Ord b => (a, b) -> (a, b) -> Ordering
+cmp (x1,y1) (x2,y2) = compare y1 y2
+
+shuffle :: Int -> Deck
+shuffle n = [card | (card, n) <- sortBy cmp (zip pack (randoms (mkStdGen n) :: [Int]))]
+
+-- Shuffles pack then adds another and shuffles both of them again
+shuffleS :: Int -> Deck
+shuffleS n = [card | (card, n) <- sortBy cmp (zip (pack ++ (shuffle n)) (randoms (mkStdGen n) :: [Int]))]
+
+groupCards :: [Card] -> [[Card]]
 groupCards [] = []
 groupCards list = [fst (splitAt 6 (list))] ++ groupCards (snd (splitAt 6 (list)))
 
+getColumns :: [[Card]] -> [[Card]]
 getColumns list = tail (reverse list)
 
 getReserve :: [[Card]] -> [Card]
 getReserve list = head (reverse list)
 
--- helpers for sDeal
+splitColumns :: Int -> [Card] -> [[Card]]
 splitColumns _ [] = []
 splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt n (list)))
 
-shuffleS n = [card | (card, n) <- sortBy cmp (zip (pack ++ (shuffle n)) (randoms (mkStdGen n) :: [Int]))]
+
+-- calling layouts
+displayEO = eODeal 1238
+displayS = sDeal 1238
 
 
-displayEO = eODeal 1238 -- ?constant?
-
---
 -- applies toFoundation until the supplied board is the same as the one after applying all subfunctions (no moves to foundations are possible)
 toFoundations (EOBoard f c r) | newBoard /= (EOBoard f c r) = toFoundations newBoard
                               | otherwise                              = EOBoard f c r
@@ -201,6 +207,7 @@ successorInC boards (EOBoard f c r) (x:xs) card
                                       succ = sCard (card)
                                       newX = [card] ++ x
                                       newBoard = EOBoard f (replace x newX c) r
+
 countEmptyColumns [] = 0
 countEmptyColumns (x:xs) | x == [] = 1 + countEmptyColumns xs
                          | otherwise = countEmptyColumns xs
@@ -223,7 +230,10 @@ generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKing
 findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1))
                                   | otherwise      = []
 
-callMoves (EOBoard f c r) card = (successorInC [] (EOBoard f c r) c card) ++ freeSpaceInR (EOBoard f c r) card
+callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head kings)] else []  ++ (successorInC [] (EOBoard newF newC newR) newC card) ++ freeSpaceInR (EOBoard newF newC newR) card
+                                  where
+                                    kings = findMoveKing (EOBoard f c r) card
+                                    (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
 
 decideDeletion _ _ _ [] = []
 decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
@@ -238,6 +248,7 @@ forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                     | length (col:cols) == 1  = newBoards
                                                     | otherwise         = forAllColumnHeads (EOBoard f c r) cols newBoards
                                                     where 
+                                                      -- calls moves on board without that card
                                                       newBoards =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
                                                       newCol = delete (head col) col
 
