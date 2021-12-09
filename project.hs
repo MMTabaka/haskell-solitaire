@@ -115,7 +115,7 @@ splitColumns _ [] = []
 splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt n (list)))
 
 -- calling layouts
-displayEO = eODeal 1240
+displayEO = eODeal 1236
 displayS = sDeal 1238
 
 
@@ -247,28 +247,35 @@ findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard
 
 
 ---- 4.3 MOVEGROUPCARDS
+-- Adds a group of cards to available position
+addList :: [Card] -> [[Card]] -> [[Card]]
 addList list [] = []
 addList list (col:cols) | col == []                                  = col : addList list cols
                         | (head col) == sCard ( head (reverse list)) = (list ++ col) : cols
                         | otherwise                                  = col : addList list cols
 
+-- Generates boards based on suplied new columns
+addColBoards :: [Card] -> [Board] -> [Board]
 addColBoards _ [] = []
 addColBoards list (board:boards) = (EOBoard f newC r) : addColBoards list boards
                                       where
                                         (EOBoard f c r) = board
                                         newC = addList list c
 
+deleteDuplicates :: [Board] -> [Board] -> [Board]
 deleteDuplicates _ [] = []
 deleteDuplicates [] _ = []
 deleteDuplicates (newBoard:newBoards) boards  | newBoard `elem` boards =  deleteDuplicates newBoards boards
                                               | otherwise              = (toFoundations newBoard) : deleteDuplicates newBoards boards
 
-
+-- Takes Cards from list up to the last successor
+getListSucc :: [Card] -> [Card]
 getListSucc [] = []
 getListSucc [card1] = []
 getListSucc (card1:card2:cards) | sCard(card1) == card2  = card1 : getListSucc (card2:cards)
                                 | otherwise              = [] 
 
+-- Generates boards by iterating through columns and using functions above
 moveGroupCards :: Board -> [[Card]] -> [Board] -> [Board]
 moveGroupCards _ [] boards = boards
 moveGroupCards (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
@@ -278,7 +285,6 @@ moveGroupCards (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                | (length col) == 1  = boards
                                                | length (col:cols) == 1  = boards
                                                | otherwise        = moveGroupCards (EOBoard f c r) cols boards
-
                                                  where
                                                    list = getListSucc col
                                                    combinations = forAllColumnHeads (EOBoard f newC r) newC []
@@ -286,21 +292,14 @@ moveGroupCards (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                    movedLists = if (length r) <= (8 - length list) then boards ++ deleteDuplicates newBoards combinations else []
                                                    newCol = filter (`notElem` list) col
                                                    newC = replace col newCol c
-                                                   
+
 callMoveGroupCards :: Board -> [Board]
-callMoveGroupCards (EOBoard f c r) = moveGroupCards (EOBoard  f c r) c [] 
+callMoveGroupCards (EOBoard f c r) = moveGroupCards (EOBoard  f c r) c []
 
--- generating all the possible boards (with duplicates)
-callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head kings)] else []  ++ (successorInC [] (EOBoard newF newC newR) newC card) ++ freeSpaceInR (EOBoard newF newC newR) card
-                                  where
-                                    kings = findMoveKing (EOBoard f c r) card
-                                    (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
 
-decideDeletion _ _ _ [] = []
-decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
 
- 
--- iterate through all heads in c and returns new boards which are a result of finding places for mentioned heads
+---- 4.4 FORALLCOlUMNHEADS AND FORALLRESERVES
+-- Iterates through all heads in c and returns new boards which are a result of finding places for mentioned heads
 forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
 forAllColumnHeads _ [] boards = boards
 forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
@@ -313,60 +312,67 @@ forAllColumnHeads (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                       -- calls moves on board without that card
                                                       newBoards =  boards ++ callMoves (EOBoard f (replace col newCol c) r) (head col)
                                                       newCol = delete (head col) col
-
+-- Iterates through all heads in r and returns new boards
 forAllReserves :: Board -> [Card] -> [Board] -> [Board]
 forAllReserves (EOBoard f c r) [] boards = boards
 forAllReserves (EOBoard f c r) (card:cards) boards = forAllReserves (EOBoard f c r) cards newBoards
                                                         where 
                                                           newBoards =  boards ++ callMoves (EOBoard f c (delete card r)) card
 
- 
+
+
+---- 4.5 CALLMOVES AND CALLITERATION
+ -- Generating all the possible boards (with duplicates)
+callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head kings)] else []  ++ (successorInC [] (EOBoard newF newC newR) newC card) 
+                                    ++ freeSpaceInR (EOBoard newF newC newR) card
+                                  where
+                                    kings = findMoveKing (EOBoard f c r) card
+                                    (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
+
 
 callIteration (EOBoard f c r) = (forAllColumnHeads (EOBoard newF newC newR) newC  []) ++ (forAllReserves (EOBoard newF newC newR) newR [])
                                   where
                                     (EOBoard newF newC newR) = toFoundations (EOBoard f c r)
 
+
+---- 4.6 REMOVEDUPLICATES AND FINALDUPLICATESREMOVAL
 -- remove from possible moves original board
-removeDuplicates _ [] = []
-removeDuplicates startBoard (board:boards) | equals   = removeDuplicates startBoard boards
-                                           | otherwise             = toFoundations(board) : removeDuplicates startBoard boards
-                                              where 
-                                                (EOBoard f c r) = startBoard
-                                                (EOBoard newF newC newR) = board
-                                                equals = f == newF && c == newC && contains r newR
-finalMovesCleaning [] = []
-finalMovesCleaning (board:boards) | board `elem` boards  = finalMovesCleaning boards
-                                  | otherwise            = board : finalMovesCleaning boards
+removeDuplicatesInitial _ [] = []
+removeDuplicatesInitial startBoard (board:boards) | equals   = removeDuplicatesInitial startBoard boards
+                                                  | otherwise             = toFoundations(board) : removeDuplicatesInitial startBoard boards
+                                                      where 
+                                                        (EOBoard f c r) = startBoard
+                                                        (EOBoard newF newC newR) = board
+                                                        equals = f == newF && c == newC && contains r newR
+-- removes duplicates inside list of boards                                                
+removeInnerDuplicates [] = []
+removeInnerDuplicates (board:boards) | board `elem` boards  = removeInnerDuplicates boards
+                                     | otherwise            = board : removeInnerDuplicates boards
 
 -- checks if two lists are equal despite order
 contains [] y = True
 contains (x:xs) y = elem x y && contains xs y
 
-findMoves :: Board -> [Board]
-findMoves board = finalMovesCleaning (removeDuplicates (toFoundations board) (callMoveGroupCards (toFoundations board)) ++ removeDuplicates (toFoundations board) (callIteration board) )
-              
 
+
+---- 4.7 FINDMOVES
+findMoves :: Board -> [Board]
+findMoves board = removeInnerDuplicates ((removeDuplicatesInitial (toFoundations board) (callMoveGroupCards (toFoundations board))
+                     ++ removeDuplicatesInitial (toFoundations board) (callIteration board) ))
+              
+-- 5 GAMEPLAY
+-- Chooses a move from all available (first one in the list)
 chooseMove :: Board -> Maybe Board
 chooseMove board | result == []  = Nothing
                  | otherwise     = Just (result !! 0)
                     where
                       result = findMoves board
 
--- reorderResults results = moveReservesToEnd results results
--- moveReservesToEnd ys [] = ys
--- moveReservesToEnd (y:ys) (x:xs) | length r > 5  = moveReservesToEnd (delete x (y:ys) ++ [x]) xs
---                                 | otherwise = moveReservesToEnd (y:ys) xs
---                                     where
---                                       (EOBoard f c r) = x
-
-
 haveWon :: Board -> Bool
 haveWon (EOBoard _ [[],[],[],[],[],[],[],[]] []) = True
 haveWon board = False 
 
-playSolitaire' board | findMoves board == [] = board
-                     | otherwise = playSolitaire' ((findMoves board) !! 0)
-
+-- Returns a number of cards in Foundations after applying all chosen moves
 playSolitaire :: Board -> Int
 playSolitaire board | findMoves board == [] = countFoundationCards f
                     | otherwise = playSolitaire ((findMoves board) !! 0)
@@ -377,10 +383,11 @@ countFoundationCards :: [Card] -> Int
 countFoundationCards [] = 0
 countFoundationCards (f:fs) = length ([Ace .. (fst f)]) + countFoundationCards fs
 
-
+-- Returns a pair (number of wins, average number of cards in Foundations) (increments seed by 50)
 analyseEO :: Int -> Int -> (Int, Int)
 analyseEO seed plays = performPlays plays 0 seed 0 0
 
+-- helpers for analyseEO
 performPlays 0 _ _ _ _ = (0,0)
 performPlays max current seed wins score | current == max  = (wins, score `div` max)
                                          | otherwise       = performPlays max (current + 1) (seed + 1) (wins + (addWin result)) (score + result)
@@ -401,10 +408,10 @@ studentUsername = "aca20mmt"
 
 initialBoardDefined = displayEO {- replace XXX with the name of the constant that you defined
                               in step 3 of part 1 -}
--- secondBoardDefined = YYY {- replace YYY with the constant defined in step 5 of part 1,
---                             or if you have chosen to demonstrate play in a different game
---                             of solitaire for part 2, a suitable contstant that will show
---                             your play to good effect for that game -}
+secondBoardDefined = displayS {- replace YYY with the constant defined in step 5 of part 1,
+                            or if you have chosen to demonstrate play in a different game
+                            of solitaire for part 2, a suitable contstant that will show
+                            your play to good effect for that game -}
 
 {- Beyond this point, the ONLY change you should make is to change the comments so that the
     work you have completed is tested. DO NOT change anything other than comments (and indentation
@@ -454,23 +461,23 @@ main =
     putStrLn $ "Score: " ++ score
     putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire initialBoardDefined)
 
-{- start comment marker - move this if appropriate
+
     putStrLn "\n\n\n************\nNow looking at the alternative game:"
 
     putStrLn "***The spider initial board constant from part 1 (or equivalent if playing a different game of solitaire):"
     print secondBoardDefined          -- show the suitable constant. For spider solitaire this
                                       -- is not an initial game, but a point from which the game
                                       -- can be won
-
+{- start comment marker - move this if appropriate
     putStrLn "***Now showing a full game for alternative solitaire"
     score <- displayGame secondBoardDefined 0 -- see what happens when we play that game (assumes chooseMove
                                               -- works correctly)
     putStrLn $ "Score: " ++ score
     putStrLn $ "and if I'd used playSolitaire, I would get score: " ++ show (playSolitaire secondBoardDefined)
 
-    -}
+  
 
-{- displayGame takes a Board and move number (should initially be 0) and
+ displayGame takes a Board and move number (should initially be 0) and
     displays the game step-by-step (board-by-board). The result *should* be
     the same as performing playSolitaire on the initial board, if it has been
     implemented correctly.
