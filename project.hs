@@ -287,6 +287,7 @@ callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head k
 decideDeletion _ _ _ [] = []
 decideDeletion oldCol newCol (EOBoard f c r) (board:boards) = EOBoard f (replace oldCol newCol c) r : decideDeletion oldCol newCol (EOBoard f c r) boards
 
+ 
 -- iterate through all heads in c and returns new boards which are a result of finding places for mentioned heads
 forAllColumnHeads :: Board -> [[Card]] -> [Board]  -> [Board]
 forAllColumnHeads _ [] boards = boards
