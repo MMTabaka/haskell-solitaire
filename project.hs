@@ -2,6 +2,9 @@ import System.Random
 import Data.List
 import Data.Maybe
 
+
+
+-- 1. TYPES
 data Suit = Hearts | Clubs | Spades | Diamonds deriving (Eq, Show, Enum)
 
 data Pip =  Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten |
@@ -35,6 +38,8 @@ isKing :: Card -> Bool
 isKing (p, s) = p == King
 
 
+
+-- 2. DISPLAYING BOARDS
 -- Displaying boards (f - foundations, c - columns, r - reserves, h - hidden, s - stock)
 instance Show Board where
     show t = showBoard t
@@ -74,15 +79,15 @@ instance Show Board where
           displayColumns separator (column:restColumns) (x:xs) = "  " ++ (wrapSquareBracket (displayCards column x)) 
             ++ separator ++ (displayColumns separator restColumns xs)
 
-
 -- Deals a deck of cards
+eODeal :: Int -> Board
 eODeal n = EOBoard [] ((getColumns.groupCards.shuffle) n) ((getReserve.groupCards.shuffle) n)
 
+sDeal :: Int -> Board
 sDeal n = SBoard [] ((splitColumns 6 (fst cardsToDeal)) ++ (splitColumns 5 (snd cardsToDeal))) [5,5,5,5,4,4,4,4,4,4] (snd cards)
     where 
       cards = splitAt 54 (shuffleS n)
       cardsToDeal = splitAt 24 (fst cards)
-
 
 -- Helpers fot initial layouts
 cmp :: Ord b => (a, b) -> (a, b) -> Ordering
@@ -109,78 +114,76 @@ splitColumns :: Int -> [Card] -> [[Card]]
 splitColumns _ [] = []
 splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt n (list)))
 
-
 -- calling layouts
 displayEO = eODeal 1240
 displayS = sDeal 1238
 
 
--- applies toFoundation until the supplied board is the same as the one after applying all subfunctions (no moves to foundations are possible)
-toFoundations (EOBoard f c r) | newBoard /= (EOBoard f c r) = toFoundations newBoard
-                              | otherwise                              = EOBoard f c r
-                               where 
-                                 newBoard = manageSubsC . manageSubsR . manageAcesC  . manageAcesR $ EOBoard f c r
 
--- hides complicated calls in simple definition that only takes EOBoard as an argument
-manageAcesR (EOBoard f c r) = aceInList (EOBoard f c r) r
-manageAcesC (EOBoard f c r) = aceInColumns (EOBoard f c r) c
-manageSubsR (EOBoard f c r) = lookForSubsR (EOBoard f c r) (length f - 1)
-manageSubsC (EOBoard f c r) = lookForSubsC (EOBoard f c r) (length f - 1)
+-- 3.TOFOUNDATIONS
+-- Applies toFoundation until the supplied board is the same as the one after applying all subfunctions (no moves to foundations are possible)
+toFoundations :: Board -> Board
+toFoundations (EOBoard f c r) | newBoard /= (EOBoard f c r) = toFoundations newBoard
+                              | otherwise                   = EOBoard f c r
+                               where 
+                                 newBoard = callSuccInC . callSuccInR . callAcesInC  . callAcesInR $ EOBoard f c r
+
+-- Hides complicated calls in simple definition that only takes EOBoard as an argument
+callAcesInR :: Board -> Board
+callAcesInR (EOBoard f c r) = acesInR (EOBoard f c r) r
+
+callAcesInC :: Board -> Board
+callAcesInC (EOBoard f c r) = acesInC (EOBoard f c r) c
+
+callSuccInR :: Board -> Board
+callSuccInR (EOBoard f c r) = lookForSuccR (EOBoard f c r) (length f - 1)
+
+callSuccInC :: Board -> Board
+callSuccInC (EOBoard f c r) = lookForSuccC (EOBoard f c r) (length f - 1)
 
 -- takes board and list of cards, then if card first card in list is ace, it's getting added to f and deleted from r 
-aceInList :: Board -> [Card] -> Board
-aceInList (EOBoard f c r) [] = EOBoard f c r
-aceInList (EOBoard f c r) (x:xs) | fst x == Ace  = EOBoard (f ++ [x]) c (deleteCard r x)
-                                 | otherwise     = aceInList (EOBoard f c r) xs
+acesInR :: Board -> [Card] -> Board
+acesInR (EOBoard f c r) [] = EOBoard f c r
+acesInR (EOBoard f c r) (x:xs) | fst x == Ace  = EOBoard (f ++ [x]) c (delete x r)
+                                 | otherwise     = acesInR (EOBoard f c r) xs
 
-aceInColumns :: Board -> [[Card]] -> Board
-aceInColumns (EOBoard f c r) [] = EOBoard f c r
-aceInColumns (EOBoard f c r) (x:xs) | (length x) == 0        = aceInColumns (EOBoard f c r) xs
+acesInC :: Board -> [[Card]] -> Board
+acesInC (EOBoard f c r) [] = EOBoard f c r
+acesInC (EOBoard f c r) (x:xs) | (length x) == 0        = acesInC (EOBoard f c r) xs
                                     | (fst (head x)) == Ace  = EOBoard (f ++ [(head x)]) (replace x newX c) r
-                                    | otherwise           = aceInColumns (EOBoard f c r) xs
+                                    | otherwise           = acesInC (EOBoard f c r) xs
                                       where
-                                        newX = deleteCard x (head x)
+                                        newX = delete (head x) x 
 
 -- takes a board, list and card, then goes through all the cards in list looking for succesor, if found than adding it to f deleteting from r
-subInList :: Board -> [Card] -> Card -> Board
-subInList (EOBoard f c r) [] card = EOBoard f c r
-subInList (EOBoard f c r) (x:xs) card | x == succ  = EOBoard (replaceCard f card x) c (deleteCard r x)
-                                      | otherwise  = subInList (EOBoard f c r) xs card
+aceSuccessorInR :: Board -> [Card] -> Card -> Board
+aceSuccessorInR (EOBoard f c r) [] card = EOBoard f c r
+aceSuccessorInR (EOBoard f c r) (x:xs) card | x == succ  = EOBoard (replace card x f) c (delete x r)
+                                      | otherwise  = aceSuccessorInR (EOBoard f c r) xs card
                                         where succ = sCard (card)
 
--- 
-subInColumns :: Board -> [[Card]] -> Card -> Board
-subInColumns (EOBoard f c r) [] card = EOBoard f c r
-subInColumns (EOBoard f c r) (x:xs) card  | (length x) == 0           = subInColumns (EOBoard f c r) xs card
-                                          | (head x) == succ          = EOBoard (replaceCard f card (head x)) (replace x newX c) r
-                                          | otherwise                 = subInColumns (EOBoard f c r) xs card
+aceSuccessorInC :: Board -> [[Card]] -> Card -> Board
+aceSuccessorInC (EOBoard f c r) [] card = EOBoard f c r
+aceSuccessorInC (EOBoard f c r) (x:xs) card  | (length x) == 0           = aceSuccessorInC (EOBoard f c r) xs card
+                                          | (head x) == succ          = EOBoard (replace card (head x) f) (replace x newX c) r
+                                          | otherwise                 = aceSuccessorInC (EOBoard f c r) xs card
                                            where 
                                              succ = sCard (card)
-                                             newX = deleteCard x (head x)
+                                             newX = delete (head x) x
 
-
-lookForSubsR :: Board -> Int -> Board
-lookForSubsR (EOBoard f c r) (-1) = EOBoard f c r
-lookForSubsR (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
-                                   | otherwise                   = lookForSubsR (EOBoard f c r) (index - 1)
+lookForSuccR :: Board -> Int -> Board
+lookForSuccR (EOBoard f c r) (-1) = EOBoard f c r
+lookForSuccR (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
+                                   | otherwise                   = lookForSuccR (EOBoard f c r) (index - 1)
                                     where
-                                      newBoard = subInList (EOBoard f c r) r (f!!index)
+                                      newBoard = aceSuccessorInR (EOBoard f c r) r (f!!index)
 
-lookForSubsC :: Board -> Int -> Board
-lookForSubsC (EOBoard f c r) (-1) = EOBoard f c r
-lookForSubsC (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
-                                   | otherwise                   = lookForSubsC (EOBoard f c r) (index - 1)
+lookForSuccC :: Board -> Int -> Board
+lookForSuccC (EOBoard f c r) (-1) = EOBoard f c r
+lookForSuccC (EOBoard f c r) index | newBoard /= EOBoard f c r   = newBoard
+                                   | otherwise                   = lookForSuccC (EOBoard f c r) (index - 1)
                                     where
-                                      newBoard = subInColumns (EOBoard f c r) c (f!!index)
-
--- helpers
-replaceCard :: [Card] -> Card -> Card -> [Card]
-replaceCard [] old new = []  
-replaceCard (x:xs) old new | x == old     = new : xs
-                               | otherwise      = x : replaceCard xs old new
-
-deleteCard :: [Card] -> Card -> [Card]
-deleteCard list card = delete card list
+                                      newBoard = aceSuccessorInC (EOBoard f c r) c (f!!index)
 
 -- replace all occurences in a list
 replace :: Eq a => a -> a -> [a] -> [a]
@@ -190,12 +193,15 @@ replace old new (x:xs) | old == x     = new:(replace old new xs)
 
 
 
--- if there is free space in reserve then it adds a card there
+-- 4. FINDMOVES
+
+---- 4.1 FREESPACEINR AND SUCCESSORINC
+-- Adds card to a free space in Reserves
 freeSpaceInR :: Board -> Card -> [Board]
 freeSpaceInR (EOBoard f c r) card | (length r) < 8  = [EOBoard f c (r ++ [card])]
                                   | otherwise = []
 
--- the same as before except the action (create just one function)
+-- Finds all possible position of given card and returns the results as list of boards
 successorInC :: [Board] -> Board -> [[Card]] -> Card -> [Board]
 successorInC boards board [] _ = boards
 successorInC boards (EOBoard f c r) (x:xs) card 
@@ -208,35 +214,39 @@ successorInC boards (EOBoard f c r) (x:xs) card
                                       newX = [card] ++ x
                                       newBoard = EOBoard f (replace x newX c) r
 
--- Inserting Kings
+
+---- 4.2 FINDMOVEKING
+-- Count number of possible places for a King
+countEmptyColumns :: [[Card]] -> Int
 countEmptyColumns [] = 0
 countEmptyColumns (x:xs) | x == [] = 1 + countEmptyColumns xs
                          | otherwise = countEmptyColumns xs
 
+-- Insert a King when coundown will reach 0 (to avoid inserting them in all empty possition at ones)
+insertKing :: [[Card]] -> Card -> Int -> [[Card]]
 insertKing [] _ _ = []
 insertKing (x:xs) card 0 | x == []   = [card]:xs
                          | otherwise = x : insertKing xs card 0
-
 insertKing (x:xs) card n | x == []    = x : insertKing xs card (n - 1)
                          | otherwise  = x : insertKing xs card n
 
+-- Generate all possible Columns with King (number of empty spaces)
 populateAllEmpty :: [[Card]] -> Card -> Int -> [[[Card]]]
 populateAllEmpty list card (-1) = []
 populateAllEmpty (x:xs) card n = [insertKing (x:xs) card n] ++ populateAllEmpty (x:xs) card (n-1)
 
+-- Connects Foundations and Reserves with generated Columns
+generateBoardKings :: Board -> [[[Card]]] -> [Board]
 generateBoardKings board [] = []
 generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKings (EOBoard f c r) xs
 
-
+-- Encapsulates all functions above in one call
+findMoveKing :: Board -> Card -> [Board]
 findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1))
                                   | otherwise      = []
 
 
--- moving the whole lists of cards
-fullBoard = EOBoard [] [[(Three, Spades),(Four, Spades)],[(Five, Spades)]] []
-board = EOBoard [] [[(Four, Spades)],[(Five, Spades)]] []
-constant = forAllColumnHeads board [[(Four, Spades)],[(Five, Spades)]] []
-
+---- 4.3 MOVEGROUPCARDS
 addList list [] = []
 addList list (col:cols) | col == []                                  = col : addList list cols
                         | (head col) == sCard ( head (reverse list)) = (list ++ col) : cols
@@ -259,14 +269,15 @@ getListSucc [card1] = []
 getListSucc (card1:card2:cards) | sCard(card1) == card2  = card1 : getListSucc (card2:cards)
                                 | otherwise              = [] 
 
-forAllBlocks _ [] boards = boards
-forAllBlocks (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
+moveGroupCards :: Board -> [[Card]] -> [Board] -> [Board]
+moveGroupCards _ [] boards = boards
+moveGroupCards (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                | (col:cols) == [[]] = boards
-                                               | col == []         = forAllBlocks (EOBoard f c r) cols boards
-                                               | if ((length col) > 1) then (sCard (head col)) == (col!!1) else False  = forAllBlocks (EOBoard f c r) cols movedLists
+                                               | col == []         = moveGroupCards (EOBoard f c r) cols boards
+                                               | if ((length col) > 1) then (sCard (head col)) == (col!!1) else False  = moveGroupCards (EOBoard f c r) cols movedLists
                                                | (length col) == 1  = boards
                                                | length (col:cols) == 1  = boards
-                                               | otherwise        = forAllBlocks (EOBoard f c r) cols boards
+                                               | otherwise        = moveGroupCards (EOBoard f c r) cols boards
 
                                                  where
                                                    list = getListSucc col
@@ -275,8 +286,9 @@ forAllBlocks (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
                                                    movedLists = if (length r) <= (8 - length list) then boards ++ deleteDuplicates newBoards combinations else []
                                                    newCol = filter (`notElem` list) col
                                                    newC = replace col newCol c
-
-callBlocks (EOBoard f c r) = forAllBlocks (EOBoard  f c r) c [] 
+                                                   
+callMoveGroupCards :: Board -> [Board]
+callMoveGroupCards (EOBoard f c r) = moveGroupCards (EOBoard  f c r) c [] 
 
 -- generating all the possible boards (with duplicates)
 callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head kings)] else []  ++ (successorInC [] (EOBoard newF newC newR) newC card) ++ freeSpaceInR (EOBoard newF newC newR) card
@@ -331,7 +343,7 @@ contains [] y = True
 contains (x:xs) y = elem x y && contains xs y
 
 findMoves :: Board -> [Board]
-findMoves board = finalMovesCleaning (removeDuplicates (toFoundations board) (callBlocks (toFoundations board)) ++ removeDuplicates (toFoundations board) (callIteration board) )
+findMoves board = finalMovesCleaning (removeDuplicates (toFoundations board) (callMoveGroupCards (toFoundations board)) ++ removeDuplicates (toFoundations board) (callIteration board) )
               
 
 chooseMove :: Board -> Maybe Board
