@@ -111,7 +111,7 @@ splitColumns n list =  [fst (splitAt n (list))] ++ splitColumns n (snd (splitAt 
 
 
 -- calling layouts
-displayEO = eODeal 1238
+displayEO = eODeal 1240
 displayS = sDeal 1238
 
 
@@ -208,6 +208,7 @@ successorInC boards (EOBoard f c r) (x:xs) card
                                       newX = [card] ++ x
                                       newBoard = EOBoard f (replace x newX c) r
 
+-- Inserting Kings
 countEmptyColumns [] = 0
 countEmptyColumns (x:xs) | x == [] = 1 + countEmptyColumns xs
                          | otherwise = countEmptyColumns xs
@@ -230,6 +231,54 @@ generateBoardKings (EOBoard f c r) (x:xs) = [EOBoard f x r] ++ generateBoardKing
 findMoveKing (EOBoard f c r) card | isKing(card)   = generateBoardKings (EOBoard f c r) (populateAllEmpty c card ((countEmptyColumns c) - 1))
                                   | otherwise      = []
 
+
+-- moving the whole lists of cards
+fullBoard = EOBoard [] [[(Three, Spades),(Four, Spades)],[(Five, Spades)]] []
+board = EOBoard [] [[(Four, Spades)],[(Five, Spades)]] []
+constant = forAllColumnHeads board [[(Four, Spades)],[(Five, Spades)]] []
+
+addList list [] = []
+addList list (col:cols) | col == []                                  = col : addList list cols
+                        | (head col) == sCard ( head (reverse list)) = (list ++ col) : cols
+                        | otherwise                                  = col : addList list cols
+
+addColBoards _ [] = []
+addColBoards list (board:boards) = (EOBoard f newC r) : addColBoards list boards
+                                      where
+                                        (EOBoard f c r) = board
+                                        newC = addList list c
+
+deleteDuplicates _ [] = []
+deleteDuplicates [] _ = []
+deleteDuplicates (newBoard:newBoards) boards  | newBoard `elem` boards =  deleteDuplicates newBoards boards
+                                              | otherwise              = (toFoundations newBoard) : deleteDuplicates newBoards boards
+
+
+getListSucc [] = []
+getListSucc [card1] = []
+getListSucc (card1:card2:cards) | sCard(card1) == card2  = card1 : getListSucc (card2:cards)
+                                | otherwise              = [] 
+
+forAllBlocks _ [] boards = boards
+forAllBlocks (EOBoard f c r) (col:cols) boards | (col:cols) == []  = boards
+                                               | (col:cols) == [[]] = boards
+                                               | col == []         = forAllBlocks (EOBoard f c r) cols boards
+                                               | if ((length col) > 1) then (sCard (head col)) == (col!!1) else False  = forAllBlocks (EOBoard f c r) cols movedLists
+                                               | (length col) == 1  = boards
+                                               | length (col:cols) == 1  = boards
+                                               | otherwise        = forAllBlocks (EOBoard f c r) cols boards
+
+                                                 where
+                                                   list = getListSucc col
+                                                   combinations = forAllColumnHeads (EOBoard f newC r) newC []
+                                                   newBoards = addColBoards list combinations
+                                                   movedLists = if (length r) <= (8 - length list) then boards ++ deleteDuplicates newBoards combinations else []
+                                                   newCol = filter (`notElem` list) col
+                                                   newC = replace col newCol c
+
+callBlocks (EOBoard f c r) = forAllBlocks (EOBoard  f c r) c [] 
+
+-- generating all the possible boards (with duplicates)
 callMoves (EOBoard f c r) card = if length kings > 0 then [toFoundations (head kings)] else []  ++ (successorInC [] (EOBoard newF newC newR) newC card) ++ freeSpaceInR (EOBoard newF newC newR) card
                                   where
                                     kings = findMoveKing (EOBoard f c r) card
@@ -272,26 +321,30 @@ removeDuplicates startBoard (board:boards) | equals   = removeDuplicates startBo
                                                 (EOBoard f c r) = startBoard
                                                 (EOBoard newF newC newR) = board
                                                 equals = f == newF && c == newC && contains r newR
+finalMovesCleaning [] = []
+finalMovesCleaning (board:boards) | board `elem` boards  = finalMovesCleaning boards
+                                  | otherwise            = board : finalMovesCleaning boards
 
 -- checks if two lists are equal despite order
 contains [] y = True
 contains (x:xs) y = elem x y && contains xs y
 
 findMoves :: Board -> [Board]
-findMoves board = removeDuplicates (toFoundations board) (callIteration board)
+findMoves board = finalMovesCleaning (removeDuplicates (toFoundations board) (callBlocks (toFoundations board)) ++ removeDuplicates (toFoundations board) (callIteration board) )
+              
 
 chooseMove :: Board -> Maybe Board
 chooseMove board | result == []  = Nothing
                  | otherwise     = Just (result !! 0)
                     where
-                      result = reorderResults (findMoves board)
+                      result = findMoves board
 
-reorderResults results = moveReservesToEnd results results
-moveReservesToEnd ys [] = ys
-moveReservesToEnd (y:ys) (x:xs) | length r > 5  = moveReservesToEnd (delete x (y:ys) ++ [x]) xs
-                                | otherwise = moveReservesToEnd (y:ys) xs
-                                    where
-                                      (EOBoard f c r) = x
+-- reorderResults results = moveReservesToEnd results results
+-- moveReservesToEnd ys [] = ys
+-- moveReservesToEnd (y:ys) (x:xs) | length r > 5  = moveReservesToEnd (delete x (y:ys) ++ [x]) xs
+--                                 | otherwise = moveReservesToEnd (y:ys) xs
+--                                     where
+--                                       (EOBoard f c r) = x
 
 
 haveWon :: Board -> Bool
@@ -305,7 +358,7 @@ playSolitaire :: Board -> Int
 playSolitaire board | findMoves board == [] = countFoundationCards f
                     | otherwise = playSolitaire ((findMoves board) !! 0)
                     where
-                      (EOBoard  f c r) = board
+                      (EOBoard f c r) = board
 
 countFoundationCards :: [Card] -> Int
 countFoundationCards [] = 0
